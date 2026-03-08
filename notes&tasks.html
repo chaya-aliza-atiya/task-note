@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task & Notes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f1f5f9;
+            --bg-image: none;
+            --bg-size: cover;
+            --bg-pos: center;
+            --panel-bg: rgba(255, 255, 255, 0.7); 
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --danger: #ef4444;
+            --success: #10b981;
+            --star: #f59e0b;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --main-font: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            font-family: var(--main-font);
+            background-color: var(--bg-color);
+            background-image: var(--bg-image);
+            background-size: var(--bg-size);
+            background-position: var(--bg-pos);
+            background-repeat: no-repeat;
+            color: var(--text);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        button { cursor: pointer; border: none; border-radius: 6px; transition: all 0.2s; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+        .btn-sm { padding: 4px 8px; font-size: 12px; background: var(--border); }
+        .btn-primary { background: var(--primary); color: white; padding: 10px; font-weight: 600; }
+        .btn-danger { background: #fee2e2; color: var(--danger); }
+        
+        header { background: var(--panel-bg); backdrop-filter: blur(10px); padding: 12px 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); z-index: 100; }
+
+        main { display: flex; flex: 1; padding: 10px; gap: 5px; overflow: hidden; } 
+        .panel { background: var(--panel-bg); border-radius: 16px; display: flex; flex-direction: column; box-shadow: var(--shadow); border: 1px solid white; overflow: hidden; backdrop-filter: blur(5px); }
+        .resizer { width: 6px; cursor: col-resize; display: flex; justify-content: center; align-items: center; }
+        .resizer::after { content: ""; width: 2px; height: 20px; background: #cbd5e1; border-radius: 2px; }
+
+        .panel-header { padding: 15px; font-weight: 800; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; background: rgba(255,255,255,0.3); }
+        .list-container { flex: 1; overflow-y: auto; padding: 10px; }
+        
+        .list-container.grid-layout { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
+        .list-container.grid-layout .category-box { flex: 1 1 300px; min-width: 250px; }
+
+        .toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 5px; background: rgba(248, 250, 252, 0.5); border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0; }
+        .toolbar select, .toolbar input { font-size: 11px; border: 1px solid var(--border); border-radius: 4px; }
+
+        .category-box { margin-bottom: 15px; background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px; border: 1px solid rgba(255,255,255,0.2); }
+        .item-card { background: rgba(255, 255, 255, 0.6); padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; border: 1px solid var(--border); display: flex; flex-direction: column; font-size: 13.5px; backdrop-filter: blur(2px); }
+        .item-card.starred { border-right: 3px solid var(--star); }
+        .item-card.completed { opacity: 0.5; background: rgba(248, 250, 252, 0.4); }
+
+        .subtasks-list { margin-top: 5px; margin-right: 22px; padding-right: 8px; border-right: 1px solid var(--border); font-size: 12px; }
+        .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 15px; width: 350px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); }
+        
+        .settings-group { border-bottom: 1px solid #eee; padding: 15px 0; display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center; }
+        .reset-small { background: #eee; border: none; padding: 5px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        #bgControls { padding:15px; background:#f9f9f9; border-radius:8px; margin-top:10px; font-size:13px; border: 1px solid #eee; }
+        
+        .hidden { display: none !important; }
+        .done-section { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+        .fold-btn { color: var(--primary); font-size: 11px; cursor: pointer; padding: 5px; font-weight: bold; }
+        .drag-handle { cursor: grab; color: #ccc; margin-left: 5px; }
+        
+        .side-by-side { display: flex; gap: 10px; height: calc(100% - 40px); overflow: hidden; }
+        .half-list { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); padding: 5px; overflow: hidden; }
+        .half-list:last-child { border-right: none; }
+        .scroll-area { flex: 1; overflow-y: auto; padding-bottom: 20px; }
+        .extra-sub-title { font-size: 11px; font-weight: bold; color: var(--text-light); margin: 10px 0 5px 0; padding-bottom: 2px; border-bottom: 1px solid #eee; }
+
+        #r-text { box-sizing: border-box; }
+    </style>
+</head>
+<body onkeydown="handleGlobalEnter(event)">
+
+<header>
+    <h2 style="margin:0; font-size: 1.2rem; color: var(--primary);">Task & Notes</h2>
+    <div id="filter-chips"></div>
+    <div style="display:flex; gap:5px;">
+        <button class="btn-sm" onclick="view('notes')">פתקים</button>
+        <button class="btn-sm" onclick="view('rems')">משימות</button>
+        <button class="btn-sm" onclick="view('extra')">⭐ & 🗑️</button>
+        <button class="btn-sm" onclick="view('both')" style="background:var(--primary); color:white;">הכל</button>
+        <button class="btn-sm" onclick="openSettings()">⚙️</button>
+    </div>
+</header>
+
+<main id="workspace">
+    <section id="p-notes" class="panel" style="flex: 50;">
+        <div class="panel-header">
+            <span>פתקים</span>
+            <button class="btn-sm" onclick="toggleLayout('list-notes')" title="שינוי פריסה">▤/▥</button>
+        </div>
+        <div style="padding: 12px; border-bottom: 1px solid var(--border);">
+            <div class="toolbar">
+                <button class="btn-sm" onclick="exec('bold')"><b>B</b></button>
+                <button class="btn-sm" onclick="exec('italic')"><i>I</i></button>
+                <button class="btn-sm" onclick="exec('insertUnorderedList')">•</button>
+                <select onchange="exec('fontName', this.value)" style="font-family: serif;">
+                    <option value="Segoe UI">Segoe</option>
+                    <option value="'Rubik', sans-serif">Rubik</option>
+                    <option value="Cursive">Cursive</option>
+                    <option value="Courier New">Monospace</option>
+                    <option value="David">David</option>
+                    <option value="Times New Roman">Times</option>
+                </select>
+                <select onchange="exec('fontSize', this.value)">
+                    <option value="3">14px</option><option value="1">10px</option><option value="2">12px</option><option value="4">16px</option><option value="5">18px</option><option value="6">24px</option>
+                </select>
+                <input type="color" onchange="exec('foreColor', this.value)">
+            </div>
+            <div id="editor" contenteditable="true" style="min-height:80px; background:rgba(255,255,255,0.8); border:1px solid var(--border); border-bottom-left-radius:8px; border-bottom-right-radius:8px; padding:10px; outline:none; font-family: 'Segoe UI';"></div>
+            <div style="display:flex; gap:5px; margin-top:8px;">
+                <input type="text" id="n-cat" placeholder="קטגוריה" list="cats" style="flex:1; border:1px solid var(--border); padding:5px; border-radius:5px;">
+                <button id="btn-save-note" class="btn-primary" onclick="addNote()">שמור</button>
+            </div>
+        </div>
+        <div id="list-notes" class="list-container sortable-cats" data-type="notes"></div>
+    </section>
+
+    <div class="resizer" id="resizer"></div>
+
+    <section id="p-rems" class="panel" style="flex: 50;">
+        <div class="panel-header">
+            <span>משימות</span>
+            <button class="btn-sm" onclick="toggleLayout('list-rems')" title="שינוי פריסה">▤/▥</button>
+        </div>
+        <div style="padding: 12px; border-bottom: 1px solid var(--border);">
+            <input type="text" id="r-text" placeholder="משימה חדשה..." style="width:100%; border:1px solid var(--border); padding:8px; border-radius:8px; margin-bottom:8px; background:rgba(255,255,255,0.8);">
+            <div style="display:flex; gap:5px;">
+                <input type="datetime-local" id="r-time" style="flex:1.5; border:1px solid var(--border); padding:5px; border-radius:5px; background:rgba(255,255,255,0.8);">
+                <input type="text" id="r-cat" placeholder="קטגוריה" list="cats" style="flex:1; border:1px solid var(--border); padding:5px; border-radius:5px; background:rgba(255,255,255,0.8);">
+                <button class="btn-primary" onclick="addRem()">הוסף</button>
+            </div>
+        </div>
+        <div id="list-rems" class="list-container sortable-cats" data-type="rems"></div>
+    </section>
+
+    <section id="p-extra" class="panel hidden" style="flex: 40;">
+        <div class="panel-header">⭐ מועדפים & 🗑️ אשפה</div>
+        <div class="side-by-side">
+            <div class="half-list">
+                <div style="padding:5px; font-weight:bold; border-bottom:1px solid var(--border);">⭐ כוכבים</div>
+                <div class="scroll-area">
+                    <div class="extra-sub-title">פתקים</div>
+                    <div id="starred-notes"></div>
+                    <div class="extra-sub-title">משימות</div>
+                    <div id="starred-rems"></div>
+                </div>
+            </div>
+            <div class="half-list">
+                <div style="padding:5px; font-weight:bold; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+                    🗑️ אשפה <button class="btn-sm btn-danger" onclick="openModal('clearTrash')">רוקן</button>
+                </div>
+                <div class="scroll-area">
+                    <div class="extra-sub-title">פתקים</div>
+                    <div id="trash-notes"></div>
+                    <div class="extra-sub-title">משימות</div>
+                    <div id="trash-rems"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+
+<div id="modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3 id="m-title"></h3>
+        <div id="m-body"></div>
+        <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+            <button id="m-confirm" class="btn-primary" style="padding:8px 20px;">אישור</button>
+            <button onclick="closeModal()" class="btn-sm" style="padding:8px 20px;">ביטול</button>
+        </div>
+    </div>
+</div>
+
+<datalist id="cats"></datalist>
+
+<script>
+    let db = JSON.parse(localStorage.getItem('tm_2026_v5')) || {
+        notes: [], rems: [], trash: [], hidden: [], widths: [50, 50],
+        settings: { textColor: '#1e293b', bgColor: '#f1f5f9', font: 'Segoe UI', bgImage: '', bgSize: 'cover', bgPos: 'center', starTop: true }
+    };
+
+    let editMode = null; 
+
+    function save(doRender = true) {
+        localStorage.setItem('tm_2026_v5', JSON.stringify(db));
+        if (doRender) render();
+    }
+
+    function exec(cmd, val = null) { document.execCommand(cmd, false, val); }
+
+    function handleGlobalEnter(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            if (document.activeElement.id === 'r-text') addRem();
+            else if (document.activeElement.id === 'm-input-val') document.getElementById('m-confirm').click();
+        }
+    }
+
+    function addNote() {
+        const c = document.getElementById('editor').innerHTML;
+        const cat = document.getElementById('n-cat').value || 'כללי';
+        if (!c.trim() || c === '<br>') return;
+        
+        if (editMode && editMode.type === 'notes') {
+            const item = db.notes.find(x => x.id === editMode.id);
+            item.content = c; item.category = cat;
+            editMode = null;
+            document.getElementById('btn-save-note').innerText = 'שמור';
+        } else {
+            db.notes.push({ id: Date.now(), content: c, category: cat, starred: false, completed: false });
+        }
+        document.getElementById('editor').innerHTML = '';
+        save();
+    }
+
+    function addRem() {
+        const t = document.getElementById('r-text').value;
+        const time = document.getElementById('r-time').value;
+        const cat = document.getElementById('r-cat').value || 'כללי';
+        if (!t) return;
+        db.rems.push({ id: Date.now(), content: t, time, category: cat, starred: false, completed: false, subs: [] });
+        document.getElementById('r-text').value = '';
+        document.getElementById('r-time').value = '';
+        save();
+    }
+
+    function editItem(type, id) {
+        const item = db[type].find(x => x.id === id);
+        if (type === 'notes') {
+            document.getElementById('editor').innerHTML = item.content;
+            document.getElementById('n-cat').value = item.category;
+            document.getElementById('btn-save-note').innerText = 'עדכן';
+            editMode = { type, id };
+            document.getElementById('editor').focus();
+        } else {
+            openModal('editRem', id);
+        }
+    }
+
+    let modalCallback = null;
+    function openModal(type, id = null, cat = null) {
+        const m = document.getElementById('modal');
+        const title = document.getElementById('m-title');
+        const body = document.getElementById('m-body');
+        m.style.display = 'flex';
+        body.innerHTML = '';
+
+        if (type === 'subtask') {
+            title.innerText = "תת-משימה";
+            body.innerHTML = `<input type="text" id="m-input-val" style="width:100%; padding:8px;" placeholder="מה לביצוע?">`;
+            modalCallback = () => {
+                const val = document.getElementById('m-input-val').value;
+                const r = db.rems.find(x => x.id === id);
+                if (val) r.subs.push({ id: Date.now(), content: val, done: false });
+            };
+        } else if (type === 'editRem') {
+            const r = db.rems.find(x => x.id === id);
+            title.innerText = "עריכת משימה";
+            body.innerHTML = `
+                <input type="text" id="m-edit-t" value="${r.content}" style="width:100%; padding:8px; margin-bottom:10px;">
+                <input type="datetime-local" id="m-edit-time" value="${r.time || ''}" style="width:100%; padding:8px; margin-bottom:10px;">
+                <input type="text" id="m-edit-c" value="${r.category}" style="width:100%; padding:8px;">
+            `;
+            modalCallback = () => {
+                r.content = document.getElementById('m-edit-t').value;
+                r.time = document.getElementById('m-edit-time').value;
+                r.category = document.getElementById('m-edit-c').value;
+            };
+        } else if (type === 'clearDone') {
+            title.innerText = "מחיקת בוצעו?";
+            body.innerText = "האם למחוק את כל המשימות ותתי-המשימות שבוצעו בקטגוריה זו?";
+            modalCallback = () => {
+                db.rems = db.rems.filter(x => !(x.category === cat && x.completed));
+                const catRems = db.rems.filter(x => x.category === cat);
+                catRems.forEach(r => r.subs = r.subs.filter(s => !s.done));
+            };
+        } else if (type === 'clearDoneSubs') {
+            title.innerText = "מחיקת תת-משימות שבוצעו?";
+            body.innerText = "האם למחוק את כל תתי-המשימות שבוצעו במשימה זו?";
+            modalCallback = () => {
+                const r = db.rems.find(x => x.id === id);
+                if(r) r.subs = r.subs.filter(s => !s.done);
+            };
+        } else if (type === 'clearTrash') {
+            title.innerText = "ריקון אשפה?";
+            modalCallback = () => db.trash = [];
+        }
+
+        setTimeout(() => {
+            const firstInput = body.querySelector('input[type="text"]');
+            if (firstInput) firstInput.focus();
+        }, 50);
+
+        document.getElementById('m-confirm').onclick = () => { modalCallback(); save(); closeModal(); };
+    }
+    function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+    function render() {
+        applySettings();
+        const cats = [...new Set([...db.notes, ...db.rems].map(x => x.category))];
+        renderChips(cats);
+        renderPanel('notes', 'list-notes');
+        renderPanel('rems', 'list-rems');
+        renderStarred();
+        renderTrash();
+        document.getElementById('cats').innerHTML = cats.map(c => `<option value="${c}">`).join('');
+        initSortable();
+    }
+
+    function renderPanel(type, containerId) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        const items = db[type];
+        const cats = [...new Set(items.map(x => x.category))].filter(c => !db.hidden.includes(c));
+
+        cats.forEach(cat => {
+            const catItems = items.filter(x => x.category === cat);
+            let active = catItems.filter(x => !x.completed);
+            if(db.settings.starTop) active.sort((a,b) => b.starred - a.starred);
+            const done = catItems.filter(x => x.completed);
+
+            let html = `<div class="category-box" data-cat="${cat}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <span><span class="drag-handle">⠿</span> <small><b>${cat}</b></small></span>
+                    <div style="display:flex; gap:3px;">
+                        <button class="btn-sm btn-danger" onclick="openModal('clearDone', null, '${cat}')">נקה בוצעו</button>
+                    </div>
+                </div>
+                <div class="items-sort-area" data-cat="${cat}">`;
+            
+            active.forEach(item => html += getItemHTML(item, type));
+            html += `</div>`;
+            if (done.length > 0) {
+                html += `<div class="fold-btn" onclick="this.nextElementSibling.classList.toggle('hidden')">⌄ בוצעו (${done.length})</div>
+                         <div class="done-section hidden">${done.map(x => getItemHTML(x, type)).join('')}</div>`;
+            }
+            html += `</div>`;
+            container.innerHTML += html;
+        });
+    }
+
+    function getItemHTML(item, type) {
+        const isNote = type === 'notes';
+        const activeSubs = item.subs ? item.subs.filter(s => !s.done) : [];
+        const doneSubs = item.subs ? item.subs.filter(s => s.done) : [];
+        const dateStr = (!isNote && item.time) ? `<div style="font-size:10px; color:var(--text-light); margin-top:2px;">📅 ${item.time.replace('T', ' ')}</div>` : '';
+
+        return `
+            <div class="item-card ${item.starred?'starred':''} ${item.completed?'completed':''}" data-id="${item.id}">
+                <div class="card-main" style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" ${item.completed?'checked':''} onclick="toggleKey('${type}', ${item.id}, 'completed')">
+                    <div class="card-text" style="flex:1; cursor:pointer;" onclick="editItem('${type}', ${item.id})">
+                        ${item.content}
+                        ${dateStr}
+                    </div>
+                    <div style="display:flex; gap:5px;">
+                        <span style="cursor:pointer; color:${item.starred? 'var(--star)':'#ccc'}" onclick="toggleKey('${type}', ${item.id}, 'starred')">★</span>
+                        <span onclick="toTrash('${isNote?'note':'rem'}', ${item.id})" style="cursor:pointer;">🗑️</span>
+                    </div>
+                </div>
+                ${!isNote ? `
+                    <div class="subtasks-list" data-remid="${item.id}">
+                        <div class="subs-active-area">
+                            ${activeSubs.map(s => `
+                                <div style="display:flex; align-items:center; gap:5px;" data-subid="${s.id}">
+                                    <span class="drag-handle" style="font-size:10px;">⠿</span>
+                                    <input type="checkbox" onclick="toggleSub(${item.id}, ${s.id})">
+                                    <span style="flex:1;">${s.content}</span>
+                                    <span onclick="delSub(${item.id}, ${s.id})" style="cursor:pointer; color:red;">✕</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        ${doneSubs.length > 0 ? `
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px;">
+                                <div class="fold-btn" onclick="this.parentElement.nextElementSibling.classList.toggle('hidden')" style="font-size:10px; color:gray;">⌄ תת-משימה בוצעו (${doneSubs.length})</div>
+                                <button class="btn-sm btn-danger" style="font-size:9px; padding:2px 5px;" onclick="openModal('clearDoneSubs', ${item.id})">מחק בוצעו</button>
+                            </div>
+                            <div class="hidden">
+                                ${doneSubs.map(s => `
+                                    <div style="opacity:0.5; display:flex; align-items:center; gap:5px; margin-right:15px;">
+                                        <input type="checkbox" checked onclick="toggleSub(${item.id}, ${s.id})">
+                                        <span style="text-decoration:line-through;">${s.content}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        <button class="btn-sm" onclick="openModal('subtask', ${item.id})" style="margin-top:5px;">+ תת משימה</button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    function toTrash(type, id) {
+        const list = type === 'note' ? db.notes : db.rems;
+        const idx = list.findIndex(x => x.id === id);
+        const item = list.splice(idx, 1)[0];
+        item.oldType = type;
+        db.trash.push(item);
+        save();
+    }
+
+    function delSub(remId, subId) {
+        const r = db.rems.find(x => x.id === remId);
+        r.subs = r.subs.filter(s => s.id !== subId);
+        save();
+    }
+
+    function toggleSub(remId, subId) {
+        const r = db.rems.find(x => x.id === remId);
+        const s = r.subs.find(x => x.id === subId);
+        s.done = !s.done;
+        save();
+    }
+
+    function toggleKey(type, id, key) {
+        const item = db[type].find(x => x.id === id);
+        item[key] = !item[key];
+        save();
+    }
+
+    function renderStarred() {
+        const sn = db.notes.filter(x => x.starred).sort((a,b) => a.category.localeCompare(b.category));
+        const sr = db.rems.filter(x => x.starred).sort((a,b) => a.category.localeCompare(b.category));
+        
+        const mapHtml = (x, type) => {
+            const dateStr = (type === 'rem' && x.time) ? `<div style="font-size:9px; color:var(--text-light);">📅 ${x.time.replace('T', ' ')}</div>` : '';
+            return `
+            <div class="item-card starred" style="font-size:11px;">
+                <div style="font-size:9px; color:var(--primary); font-weight:bold;">${x.category}</div>
+                <div>${x.content.replace(/<[^>]*>?/gm, '').substring(0,40)}</div>
+                ${dateStr}
+            </div>`;
+        }
+
+        document.getElementById('starred-notes').innerHTML = sn.map(i => mapHtml(i, 'note')).join('');
+        document.getElementById('starred-rems').innerHTML = sr.map(i => mapHtml(i, 'rem')).join('');
+    }
+
+    function renderTrash() {
+        const tn = db.trash.filter(x => x.oldType === 'note').sort((a,b) => a.category.localeCompare(b.category));
+        const tr = db.trash.filter(x => x.oldType === 'rem').sort((a,b) => a.category.localeCompare(b.category));
+
+        const mapHtml = (x, type) => {
+            const dateStr = (type === 'rem' && x.time) ? `<div style="font-size:9px; color:var(--text-light);">📅 ${x.time.replace('T', ' ')}</div>` : '';
+            return `
+            <div class="item-card" style="font-size:11px;">
+                <div style="font-size:9px; color:var(--text-light);">${x.category}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                   <span>${x.content.replace(/<[^>]*>?/gm, '').substring(0,15)}</span>
+                   <button class="btn-sm" onclick="restore(${x.id})">↺</button>
+                </div>
+                ${dateStr}
+            </div>`;
+        }
+
+        document.getElementById('trash-notes').innerHTML = tn.map(i => mapHtml(i, 'note')).join('');
+        document.getElementById('trash-rems').innerHTML = tr.map(i => mapHtml(i, 'rem')).join('');
+    }
+
+    function restore(id) {
+        const idx = db.trash.findIndex(x => x.id === id);
+        const item = db.trash.splice(idx, 1)[0];
+        db[item.oldType === 'note' ? 'notes' : 'rems'].push(item);
+        save();
+    }
+
+    function renderChips(cats) {
+        document.getElementById('filter-chips').innerHTML = cats.map(c => `
+            <button class="btn-sm" style="border-radius:20px; background:${db.hidden.includes(c)?'rgba(255,255,255,0.5)':'#e0e7ff'}" onclick="toggleCat('${c}')">${c}</button>
+        `).join('');
+    }
+    
+    function toggleCat(c) {
+        db.hidden.includes(c) ? db.hidden = db.hidden.filter(x => x !== c) : db.hidden.push(c);
+        save();
+    }
+
+    function toggleLayout(containerId) {
+        const el = document.getElementById(containerId);
+        el.classList.toggle('grid-layout');
+    }
+
+    function view(v) {
+        const p = { n: document.getElementById('p-notes'), r: document.getElementById('p-rems'), e: document.getElementById('p-extra'), res: document.getElementById('resizer') };
+        Object.values(p).forEach(x => x.classList.add('hidden'));
+        
+        const ln = document.getElementById('list-notes');
+        const lr = document.getElementById('list-rems');
+
+        if (v === 'notes') {
+            p.n.classList.remove('hidden');
+            ln.classList.remove('grid-layout'); 
+        }
+        else if (v === 'rems') {
+            p.r.classList.remove('hidden');
+            lr.classList.add('grid-layout');    
+        }
+        else if (v === 'extra') {
+            p.e.classList.remove('hidden');
+        }
+        else { 
+            p.n.classList.remove('hidden'); 
+            p.r.classList.remove('hidden'); 
+            p.res.classList.remove('hidden'); 
+            ln.classList.remove('grid-layout'); 
+            lr.classList.remove('grid-layout'); 
+        }
+    }
+
+    function openSettings() {
+        const m = document.getElementById('modal');
+        const body = document.getElementById('m-body');
+        m.style.display = 'flex';
+        document.getElementById('m-title').innerHTML = `<h3 style="margin-top:0; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">הגדרות עיצוב ורקע</h3>`;
+        
+        body.innerHTML = `
+            <div class="settings-group">
+                <label>צבעים:</label>
+                <div style="display:flex; gap:5px;">
+                    <input type="color" id="s-primary" title="ראשי" value="${getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()}">
+                    <input type="color" id="s-color" title="טקסט" value="${db.settings.textColor}">
+                    <input type="color" id="s-bg" title="רקע" value="${db.settings.bgColor}">
+                </div>
+                <button class="reset-small" onclick="resetSetting('colors')">איפוס</button>
+            </div>
+
+            <div class="settings-group">
+                <label>גופן (סוג וגודל):</label>
+                <div style="display:flex; gap:5px;">
+                    <select id="s-font" style="margin:0">
+                        <option value="'Segoe UI', sans-serif">Segoe UI</option>
+                        <option value="'Assistant', sans-serif">Assistant</option>
+                        <option value="'David Libre', serif">David</option>
+                        <option value="'Rubik', sans-serif">Rubik</option>
+                        <option value="'Heebo', sans-serif">Heebo</option>
+                        <option value="'Courier New', monospace">Courier (מכונת כתיבה)</option>
+                    </select>
+                    <input type="number" id="s-font-size" style="width:60px; margin:0" value="16">
+                </div>
+                <button class="reset-small" onclick="resetSetting('font')">איפוס</button>
+            </div>
+
+            <div class="settings-group" style="grid-template-columns: 1fr auto;">
+                <label>תמונת רקע (קובץ):</label>
+                <input type="file" id="s-img" accept="image/*">
+                <button class="reset-small" onclick="resetSetting('bgImg')">הסר תמונה</button>
+            </div>
+
+            <div id="bgControls">
+                <label><strong>התאמת תמונה:</strong></label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                    <select id="s-img-size" style="margin:0">
+                        <option value="cover">מילוי מסך (Cover)</option>
+                        <option value="contain">הכלה (Contain)</option>
+                        <option value="100% 100%">מתיחה</option>
+                        <option value="auto">גודל מקורי</option>
+                    </select>
+                    <select id="s-img-pos" style="margin:0">
+                        <option value="center">מרכז</option>
+                        <option value="top">למעלה</option>
+                        <option value="bottom">למטה</option>
+                        <option value="right top">ימין למעלה</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="settings-group" style="grid-template-columns: 1fr auto;">
+                <label>כוכבים בראש</label>
+                <input type="checkbox" id="s-star" ${db.settings.starTop?'checked':''}>
+            </div>
+        `;
+
+        document.getElementById('m-confirm').onclick = () => {
+            db.settings.textColor = document.getElementById('s-color').value;
+            db.settings.bgColor = document.getElementById('s-bg').value;
+            db.settings.font = document.getElementById('s-font').value;
+            db.settings.bgSize = document.getElementById('s-img-size').value;
+            db.settings.bgPos = document.getElementById('s-img-pos').value;
+            db.settings.starTop = document.getElementById('s-star').checked;
+            
+            const primary = document.getElementById('s-primary').value;
+            document.documentElement.style.setProperty('--primary', primary);
+
+            const imgFile = document.getElementById('s-img').files[0];
+            if (imgFile) {
+                const reader = new FileReader();
+                reader.onload = (e) => { db.settings.bgImage = `url(${e.target.result})`; save(); };
+                reader.readAsDataURL(imgFile);
+            } else save();
+            closeModal();
+        };
+    }
+
+    function resetSetting(type) {
+        if(type === 'colors') {
+            document.getElementById('s-primary').value = '#4f46e5';
+            document.getElementById('s-color').value = '#1e293b';
+            document.getElementById('s-bg').value = '#f1f5f9';
+        } else if(type === 'font') {
+            document.getElementById('s-font').value = 'Segoe UI';
+            document.getElementById('s-font-size').value = '16';
+        } else if(type === 'bgImg') {
+            db.settings.bgImage = '';
+            save();
+        }
+    }
+
+    function applySettings() {
+        const s = db.settings;
+        document.documentElement.style.setProperty('--text', s.textColor);
+        document.documentElement.style.setProperty('--bg-color', s.bgColor);
+        document.documentElement.style.setProperty('--main-font', s.font);
+        document.documentElement.style.setProperty('--bg-image', s.bgImage || 'none');
+        document.documentElement.style.setProperty('--bg-size', s.bgSize);
+        document.documentElement.style.setProperty('--bg-pos', s.bgPos);
+    }
+
+    function initSortable() {
+        document.querySelectorAll('.sortable-cats').forEach(el => {
+            new Sortable(el, { animation: 150, handle: '.drag-handle', onEnd: (evt) => {
+                const type = el.dataset.type;
+                const catNames = Array.from(el.querySelectorAll('.category-box')).map(c => c.dataset.cat);
+                const newItems = [];
+                catNames.forEach(name => newItems.push(...db[type].filter(x => x.category === name)));
+                db[type] = newItems;
+                save(false);
+            }});
+        });
+
+        document.querySelectorAll('.items-sort-area').forEach(el => {
+            new Sortable(el, { animation: 150, onEnd: (evt) => {
+                const cat = el.dataset.cat;
+                const ids = Array.from(el.querySelectorAll('.item-card')).map(i => Number(i.dataset.id));
+                const type = el.closest('.panel').id === 'p-notes' ? 'notes' : 'rems';
+                const other = db[type].filter(x => x.category !== cat);
+                const catItems = db[type].filter(x => x.category === cat);
+                db[type] = [...other, ...ids.map(id => catItems.find(x => x.id === id))];
+                save(false);
+            }});
+        });
+
+        document.querySelectorAll('.subs-active-area').forEach(el => {
+            new Sortable(el, { animation: 150, handle: '.drag-handle', onEnd: () => {
+                const remId = Number(el.closest('.subtasks-list').dataset.remid);
+                const subIds = Array.from(el.querySelectorAll('[data-subid]')).map(s => Number(s.dataset.subid));
+                const rem = db.rems.find(x => x.id === remId);
+                const doneSubs = rem.subs.filter(s => s.done);
+                const activeSubs = rem.subs.filter(s => !s.done);
+                rem.subs = [...subIds.map(id => activeSubs.find(s => s.id === id)), ...doneSubs];
+                save(false);
+            }});
+        });
+    }
+
+    const resizer = document.getElementById('resizer');
+    resizer.onmousedown = (e) => {
+        document.onmousemove = (e) => {
+            const w = document.getElementById('workspace').offsetWidth;
+            const x = e.clientX - document.getElementById('workspace').offsetLeft;
+            const pct = ((w - x) / w) * 100;
+            if (pct > 10 && pct < 90) {
+                db.widths = [pct, 100 - pct];
+                document.getElementById('p-notes').style.flex = pct;
+                document.getElementById('p-rems').style.flex = 100 - pct;
+                save(false);
+            }
+        };
+        document.onmouseup = () => document.onmousemove = null;
+    };
+
+    render();
+</script>
+</body>
+</html>
